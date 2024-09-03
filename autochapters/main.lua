@@ -324,7 +324,7 @@ local function search()
                 if not found then
                     mp.osd_message("No chapters found for " .. (title and (title .. (episode and (" Episode " .. episode) or "")) or media_title))
                 end
-                if restore_pause then
+                if pause_and_restore then
                     mp.set_property_bool("pause", false)
                 end
             else
