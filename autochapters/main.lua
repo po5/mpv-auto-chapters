@@ -16,7 +16,8 @@ local options = {
     search_only_when_chapters_missing = true,
     allow_loose_matches = true,
     keep_previous_chapters = false,
-    pause_on_search = true
+    pause_on_search = true,
+    hook = false
 }
 
 local script_name = mp.get_script_name()
@@ -377,4 +378,9 @@ end
 
 mp.add_key_binding(nil, "search", search)
 mp.add_key_binding(nil, "update", update_db)
-mp.register_event("start-file", file_load)
+
+if options.hook then
+    mp.add_hook("on_preloaded", 50, file_load)
+else
+    mp.register_event("start-file", file_load)
+end
