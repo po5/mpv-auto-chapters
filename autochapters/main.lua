@@ -355,17 +355,21 @@ local function search()
         submit = function (media_title)
             placeholder_title = media_title
             if media_title ~= "" then
-                local found, title, episode = find_chapters(media_title)
-                if not found then
-                    mp.osd_message("No chapters found for " .. (title and (title .. (episode and (" Episode " .. episode) or "")) or media_title))
-                end
-                if pause_and_restore then
-                    mp.set_property_bool("pause", false)
-                end
+                mp.add_timeout(0.05, function()
+                    local found, title, episode = find_chapters(media_title)
+                    if not found then
+                        mp.osd_message("No chapters found for " .. (title and (title .. (episode and (" Episode " .. episode) or "")) or media_title))
+                    end
+                end)
             else
                 mp.set_property_native("chapter-list", {})
             end
             input.terminate()
+        end,
+        closed = function (media_title)
+            if pause_and_restore then
+                mp.set_property_bool("pause", false)
+            end
         end,
         default_text = placeholder_title,
         cursor_position = #placeholder_title + 1
