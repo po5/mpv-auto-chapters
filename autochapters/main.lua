@@ -112,7 +112,7 @@ local function update_db()
     relations = {}
 
     local rules = anime_relations.stdout:match("::rules(.+)")
-    if rules == "" then
+    if anime_relations.stdout == "" or rules == "" then
         log("autochapters: couldn't download anime-relations database, is curl installed?")
         return
     end
