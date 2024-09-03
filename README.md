@@ -2,9 +2,9 @@
 Automatically finds chapters for your anime files.
 
 ## Installation
-Place the autochapters folder in your mpv `scripts` folder. Do not take the Lua file out of the folder.  
+Place the "autochapters" folder in your mpv `scripts` folder. Do not take the Lua file out of the folder.  
 This script requires **curl** and **guessit** to be installed and [accessible within Path](https://learn.microsoft.com/en-us/previous-versions/office/developer/sharepoint-2010/ee537574(v=office.14)#to-add-a-path-to-the-path-environment-variable).  
-For Windows grab the [curl](https://curl.se/windows/) and [guessit-windows.exe](https://github.com/guessit-io/guessit/releases/latest) binaries.  
+For Windows grab the [curl](https://curl.se/windows/) and [guessit-windows.exe](https://github.com/guessit-io/guessit/releases/latest) binaries. Rename the guessit file to `guessit.exe`.  
 Use your package manager on Mac/Linux.
 
 ## Usage
