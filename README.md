@@ -19,4 +19,5 @@ Chapter data is also available under the `user-data/autochapters` property, and 
 ## Acknowledgements
 [Aniskip](https://github.com/aniskip) for the API serving chapters.  
 [ani-skip](https://github.com/synacktraa/ani-skip) for being annoying enough to use that I went and made this.  
-manami's [anime-offline-database](https://github.com/manami-project/anime-offline-database) which is used to link titles to MyAnimeList IDs.
+manami's [anime-offline-database](https://github.com/manami-project/anime-offline-database) which is used to link titles to MyAnimeList IDs.  
+Taiga's [anime-relations](https://github.com/erengy/anime-relations) used to resolve continuous numbering schemes to their respective seasons.

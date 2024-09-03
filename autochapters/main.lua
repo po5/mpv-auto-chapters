@@ -32,15 +32,18 @@ local types = {
 
 local api_url = "https://api.aniskip.com/v2"
 local db_url = "https://github.com/manami-project/anime-offline-database/raw/master/anime-offline-database-minified.json"
+local relations_url = "https://github.com/erengy/anime-relations/raw/master/anime-relations.txt"
+local placeholder_title = ""
 
-local anime = nil
-local placeholder_title = "Bleach Episode 16"
-local json_path
+local anime, relations, borked
+local json_path, relations_path
 local script_path, found = debug.getinfo(1, "S").source:gsub("^@", ""):gsub("([\\/]scripts[\\/][^\\/]+[\\/])main%.lua$", "%1")
 if found > 0 then
     json_path = script_path .. "anime.json"
+    relations_path = script_path .. "relations.json"
 else
     json_path = mp.command_native({"expand-path", "~~/scripts/"..script_name.."/anime.json"})
+    relations_path = mp.command_native({"expand-path", "~~/scripts/"..script_name.."/relations.json"})
 end
 
 local function log(message)
@@ -81,10 +84,6 @@ local function guess(path, auto)
         data.episode = data.episode[1]
     end
 
-    if not auto then
-        mp.osd_message("Searching for " .. data.title .. (data.episode and (" Episode " .. data.episode) or "") .. "...")
-    end
-
     return data.title, data.episode
 end
 
@@ -104,6 +103,49 @@ local function extract_mal_id(url)
 end
 
 local function update_db()
+    local anime_relations = mp.command_native({name = "subprocess", playback_only = false, capture_stdout = true, args = {"curl", "-s", "-L", relations_url}})
+    if not anime_relations or not anime_relations.stdout then
+        return
+    end
+
+    relations = {}
+
+    local rules = anime_relations.stdout:match("::rules(.+)")
+    if rules == "" then
+        log("autochapters: couldn't download anime-relations database, is curl installed?")
+        return
+    end
+
+    for rule in rules:gmatch("[^\r\n]+") do
+        in_mal_id, in_ep_start, in_ep_end, out_mal_id, out_ep_start, out_ep_end, self_redirect = string.match(rule, "^%- ([0-9]+)|[0-9?]+|[0-9?]+:([0-9]+)%-?([0-9?]*) %-> ([0-9~]+)|[0-9?~]+|[0-9?~]+:([0-9]+)%-?([0-9?]*)(!?)")
+        if in_mal_id then
+            local out_mal_id_string = out_mal_id
+            in_ep_start, in_ep_end, out_ep_start, self_redirect = tonumber(in_ep_start), tonumber(in_ep_end), tonumber(out_ep_start), self_redirect
+            if not relations[in_mal_id] then
+                relations[in_mal_id] = {}
+            end
+            if out_mal_id == "~" then
+                out_mal_id = tonumber(in_mal_id)
+            else
+                out_mal_id = tonumber(out_mal_id)
+            end
+            table.insert(relations[in_mal_id], {a=in_ep_start, b=in_ep_end, x=out_ep_start, z=out_mal_id})
+            if self_redirect == "!" then
+                if not relations[out_mal_id_string] then
+                    relations[out_mal_id_string] = {}
+                end
+                table.insert(relations[out_mal_id_string], {a=in_ep_start, b=in_ep_end, x=out_ep_start, z=out_mal_id})
+            end
+        end
+    end
+
+    json = utils.format_json(relations)
+    local f = io.open(relations_path, "w")
+    if f then
+        f:write(json)
+        f:close()
+    end
+
     local manami = mp.command_native({name = "subprocess", playback_only = false, capture_stdout = true, args = {"curl", "-s", "-L", db_url}})
     if not manami or not manami.stdout then
         return
@@ -145,30 +187,58 @@ local function update_db()
     end
 end
 
-local function api_lookup(title, episode, duration)
-    if anime == nil then
-        local f = io.open(json_path, "r")
-        if f then
-            local json = f:read("*all")
-            f:close()
+local function resolve_relations(mal_id, episode)
+    if not relations[mal_id] then
+        return mal_id, episode
+    end
+    local ep = episode or 0
+    for _, r in ipairs(relations[mal_id]) do
+        if ep >= r.a and ep <= (r.b or math.huge) then
+            local offset = r.a - r.x
+            return r.z, ep - offset
+        end
+    end
+    return mal_id, episode
+end
 
-            local data = utils.parse_json(json or "")
-            if data and type(data) == "table" then
-                anime = data
-            else
-                update_db()
-            end
-        else
+local function read_json(path)
+    local f = io.open(path, "r")
+    if f then
+        local json = f:read("*all")
+        f:close()
+
+        data = utils.parse_json(json or "")
+        if data and type(data) == "table" then
+            return data
+        end
+    end
+end
+
+local function api_lookup(title, episode, duration, auto)
+    if borked then return end
+
+    if anime == nil or relations == nil then
+        anime = read_json(json_path)
+        relations = read_json(relations_path)
+        if anime == nil or relations == nil then
             update_db()
         end
     end
 
-    if anime == nil then
+    if anime == nil or relations == nil then
+        borked = true
         return
     end
 
     local mal_id = anime[title:lower():gsub("%s+", "")]
     if not mal_id then return end
+
+    if not auto then
+        mp.osd_message("Searching for " .. title .. (episode and (" Episode " .. episode) or "") .. "...")
+    end
+
+    mal_id = tostring(mal_id)
+    mal_id, episode = resolve_relations(mal_id, episode)
 
     local url = api_url .. "/skip-times/" .. mal_id .. "/" .. (episode or 1) .. "?types[]=op&types[]=ed&types[]=mixed-op&types[]=mixed-ed&types[]=recap&episodeLength=" .. duration
     local aniskip = mp.command_native({name = "subprocess", playback_only = false, capture_stdout = true, args = {"curl", "-s", url}})
@@ -183,7 +253,7 @@ local function api_lookup(title, episode, duration)
     end
 
     if data.error then
-        log("autochapters: got an error " .. aniskip.statusCode .. " from aniskip " .. utils.format_json(aniskip.message))
+        log("autochapters: got an error " .. data.statusCode .. " from aniskip " .. utils.format_json(data.message))
         return
     end
 
@@ -223,9 +293,9 @@ local function find_chapters(media_title, auto)
 
     local duration = mp.get_property_number("duration", 0)
 
-    local found = api_lookup(title, episode, duration)
+    local found = api_lookup(title, episode, duration, auto)
     if not found and options.allow_loose_matches then
-        found = api_lookup(title, episode, 0)
+        found = api_lookup(title, episode, 0, auto)
     end
 
     if not found then
