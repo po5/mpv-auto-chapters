@@ -116,8 +116,9 @@ local function update_db()
         return
     end
 
+    local in_title, out_title, number_title, number_index = "", "", false, 0
     for rule in rules:gmatch("[^\r\n]+") do
-        in_mal_id, in_ep_start, in_ep_end, out_mal_id, out_ep_start, out_ep_end, self_redirect = string.match(rule, "^%- ([0-9]+)|[0-9?]+|[0-9?]+:([0-9]+)%-?([0-9?]*) %-> ([0-9~]+)|[0-9?~]+|[0-9?~]+:([0-9]+)%-?([0-9?]*)(!?)")
+        local in_mal_id, in_ep_start, in_ep_end, out_mal_id, out_ep_start, out_ep_end, self_redirect = string.match(rule, "^%- ([0-9]+)|[0-9?]+|[0-9?]+:([0-9]+)%-?([0-9?]*) %-> ([0-9~]+)|[0-9?~]+|[0-9?~]+:([0-9]+)%-?([0-9?]*)(!?)")
         if in_mal_id then
             local out_mal_id_string = out_mal_id
             in_ep_start, in_ep_end, out_ep_start, self_redirect = tonumber(in_ep_start), tonumber(in_ep_end), tonumber(out_ep_start), self_redirect
@@ -129,12 +130,41 @@ local function update_db()
             else
                 out_mal_id = tonumber(out_mal_id)
             end
-            table.insert(relations[in_mal_id], {a=in_ep_start, b=in_ep_end, x=out_ep_start, z=out_mal_id})
+            local title = out_title
+            if number_title then
+                number_index = number_index + 1
+                local number_list = string.match(title, "~? ?(.+)")
+                local numbers = {}
+                for num in number_list:gmatch("([^,]+)") do
+                    numbers[#numbers + 1] = num
+                end
+                local number = numbers[number_index]
+                if number then
+                    local new_title, count = string.gsub(in_title, "%%d", number)
+                    title = new_title
+                    if count == 0 then
+                        title = in_title .. " " .. number
+                    end
+                end
+            end
+            title = string.gsub(title, "~", in_title)
+            table.insert(relations[in_mal_id], {a=in_ep_start, b=in_ep_end, x=out_ep_start, z=out_mal_id, t=title})
             if self_redirect == "!" then
                 if not relations[out_mal_id_string] then
                     relations[out_mal_id_string] = {}
                 end
-                table.insert(relations[out_mal_id_string], {a=in_ep_start, b=in_ep_end, x=out_ep_start, z=out_mal_id})
+                table.insert(relations[out_mal_id_string], {a=in_ep_start, b=in_ep_end, x=out_ep_start, z=out_mal_id, t=title})
+            end
+        else
+            local _in_title, _out_title = string.match(rule, "^# (.+) %-> (.*)")
+            if _in_title then
+                number_title = false
+                number_index = 0
+                in_title, out_title = _in_title, _out_title
+                if string.find(out_title, ",[0-9]") or string.find(out_title, "[0-9],") then
+                    number_title = true
+                    in_title = string.gsub(in_title, "S?%d", "%%d")
+                end
             end
         end
     end
@@ -195,7 +225,7 @@ local function resolve_relations(mal_id, episode)
     for _, r in ipairs(relations[mal_id]) do
         if ep >= r.a and ep <= (r.b or math.huge) then
             local offset = r.a - r.x
-            return r.z, ep - offset
+            return r.z, ep - offset, r.t
         end
     end
     return mal_id, episode
@@ -233,12 +263,16 @@ local function api_lookup(title, episode, duration, auto)
     local mal_id = anime[title:lower():gsub("%s+", "")]
     if not mal_id then return end
 
-    if not auto then
-        mp.osd_message("Searching for " .. title .. (episode and (" Episode " .. episode) or "") .. "...")
-    end
-
+    local relation_title
+    local in_episode = episode
     mal_id = tostring(mal_id)
-    mal_id, episode = resolve_relations(mal_id, episode)
+    mal_id, episode, relation_title = resolve_relations(mal_id, episode)
+
+    local display_episode = relation_title and episode or in_episode
+
+    if not auto then
+        mp.osd_message("Searching for " .. (relation_title or title) .. (display_episode and (" Episode " .. display_episode) or "") .. "...")
+    end
 
     local url = api_url .. "/skip-times/" .. mal_id .. "/" .. (episode or 1) .. "?types[]=op&types[]=ed&types[]=mixed-op&types[]=mixed-ed&types[]=recap&episodeLength=" .. duration
     local aniskip = mp.command_native({name = "subprocess", playback_only = false, capture_stdout = true, args = {"curl", "-s", url}})
