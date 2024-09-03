@@ -20,7 +20,7 @@ local options = {
     hook = false
 }
 
-local script_name = mp.get_script_name()
+local script_name, script_dir = mp.get_script_name(), mp.get_script_directory()
 opts.read_options(options, script_name, function() end)
 
 local types = {
@@ -37,15 +37,8 @@ local relations_url = "https://github.com/erengy/anime-relations/raw/master/anim
 local placeholder_title = ""
 
 local anime, relations, borked
-local json_path, relations_path
-local script_path, found = debug.getinfo(1, "S").source:gsub("^@", ""):gsub("([\\/]scripts[\\/][^\\/]+[\\/])main%.lua$", "%1")
-if found > 0 then
-    json_path = script_path .. "anime.json"
-    relations_path = script_path .. "relations.json"
-else
-    json_path = mp.command_native({"expand-path", "~~/scripts/"..script_name.."/anime.json"})
-    relations_path = mp.command_native({"expand-path", "~~/scripts/"..script_name.."/relations.json"})
-end
+local json_path = utils.join_path(script_dir, "anime.json")
+local relations_path = utils.join_path(script_dir, "relations.json")
 
 local function log(message)
     mp.osd_message(message)
