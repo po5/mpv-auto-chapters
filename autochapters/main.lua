@@ -379,5 +379,5 @@ mp.add_key_binding(nil, "update", update_db)
 if options.hook then
     mp.add_hook("on_preloaded", 50, file_load)
 else
-    mp.register_event("start-file", file_load)
+    mp.register_event("file-loaded", file_load)
 end
